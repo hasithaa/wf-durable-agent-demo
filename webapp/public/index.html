@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tenant Maintenance</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🔧 Tenant Maintenance</div>
+    <div class="who" id="who"></div>
+    <button class="bell" id="bell" title="Notifications">🔔 <span class="badge" id="badge" hidden>0</span></button>
+  </header>
+  <main class="layout">
+    <nav class="sidebar">
+      <section id="new-request" hidden>
+        <h2>Report a problem</h2>
+        <form id="request-form">
+          <input name="title" placeholder="Short title, e.g. Kitchen sink leaking" required>
+          <input name="unit" placeholder="Unit, e.g. 4B" required>
+          <textarea name="issue" rows="3" placeholder="What is happening?" required></textarea>
+          <button type="submit">Send to maintenance</button>
+        </form>
+      </section>
+      <section>
+        <h2 id="requests-title">Requests</h2>
+        <ul class="list" id="requests"></ul>
+      </section>
+      <section>
+        <h2>Conversations</h2>
+        <ul class="list" id="conversations"></ul>
+      </section>
+    </nav>
+    <section class="main" id="main">
+      <div class="empty" id="empty">Select a conversation or a request.</div>
+      <div class="chat" id="chat" hidden>
+        <div class="chat-head" id="chat-head"></div>
+        <div class="messages" id="messages"></div>
+        <div class="typing" id="typing" hidden>Maintenance assistant is typing…</div>
+        <form class="composer" id="composer">
+          <input name="text" placeholder="Write a message…" autocomplete="off">
+          <button type="submit">Send</button>
+        </form>
+      </div>
+      <div class="detail" id="detail" hidden></div>
+    </section>
+    <aside class="side">
+      <section id="tasks-panel" hidden>
+        <h2>Approvals</h2>
+        <ul class="list" id="tasks"></ul>
+      </section>
+      <section>
+        <h2>Inbox</h2>
+        <div class="tabs" id="inbox-tabs">
+          <button data-box="all" class="active">All</button>
+          <button data-box="personal">Personal</button>
+          <button data-box="role">Roles</button>
+          <button id="read-all" class="link">Mark all read</button>
+        </div>
+        <ul class="list inbox" id="inbox"></ul>
+      </section>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

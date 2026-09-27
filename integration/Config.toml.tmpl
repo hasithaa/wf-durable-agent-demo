@@ -1,0 +1,86 @@
+# docker compose: Thunder tokens for people, the API key for the workflow, H2 files on the data volume.
+# Rendered by entrypoint.sh.
+
+[tenantapp.maintenance]
+serviceApiKey = "@SERVICE_API_KEY@"
+webhookSecret = "@WEBHOOK_SECRET@"
+demoSecondsPerHour = @DEMO_SECONDS_PER_HOUR@
+corsAllowOrigins = ["http://localhost:9095"]
+
+[tenantapp.maintenance.auth]
+enableJwtAuth = true
+jwtIssuer = "@THUNDER_ISSUER@"
+jwksUrl = "@THUNDER_JWKS_URL@"
+jwksVerifyTls = false
+userIdClaim = "username"
+rolesClaim = "groups"
+enableApiKey = true
+apiKeyValue = "@SERVICE_API_KEY@"
+
+[tenantapp.maintenance.db]
+url = "jdbc:h2:/data/tenant-app;AUTO_SERVER=TRUE"
+
+[ballerina.workflow]
+mode = "SELF_HOSTED"
+url = "@TEMPORAL_URL@"
+namespace = "default"
+taskQueue = "TENANT_MAINTENANCE"
+
+[commons.notification.server]
+ns = "tenant-app"
+[commons.notification.server.auth]
+enableJwtAuth = true
+jwtIssuer = "@THUNDER_ISSUER@"
+jwksUrl = "@THUNDER_JWKS_URL@"
+jwksVerifyTls = false
+userIdClaim = "username"
+rolesClaim = "groups"
+enableApiKey = true
+apiKeyValue = "@SERVICE_API_KEY@"
+[commons.notification.server.db]
+url = "jdbc:h2:/data/tenant-app;AUTO_SERVER=TRUE"
+
+[commons.chat.server]
+ns = "tenant-app"
+[commons.chat.server.auth]
+enableJwtAuth = true
+jwtIssuer = "@THUNDER_ISSUER@"
+jwksUrl = "@THUNDER_JWKS_URL@"
+jwksVerifyTls = false
+userIdClaim = "username"
+rolesClaim = "groups"
+enableApiKey = true
+apiKeyValue = "@SERVICE_API_KEY@"
+[commons.chat.server.db]
+url = "jdbc:h2:/data/tenant-app;AUTO_SERVER=TRUE"
+[[commons.chat.server.webhooks]]
+participantId = "agent:maintenance"
+url = "http://localhost:9090/hooks/chat"
+secret = "@WEBHOOK_SECRET@"
+events = ["message.created", "form.submitted"]
+
+[commons.attachment.server]
+ns = "tenant-app"
+linkSecret = "@LINK_SECRET@"
+adminRoles = [
+    {role = "PropertyManager", permissions = ["read", "delete", "reopen", "close"]}
+]
+[commons.attachment.server.auth]
+enableJwtAuth = true
+jwtIssuer = "@THUNDER_ISSUER@"
+jwksUrl = "@THUNDER_JWKS_URL@"
+jwksVerifyTls = false
+userIdClaim = "username"
+rolesClaim = "groups"
+enableApiKey = true
+apiKeyValue = "@SERVICE_API_KEY@"
+[commons.attachment.server.db]
+url = "jdbc:h2:/data/tenant-app;AUTO_SERVER=TRUE"
+[[commons.attachment.server.webhooks]]
+participantId = "agent:maintenance"
+url = "http://localhost:9090/hooks/attachments"
+secret = "@WEBHOOK_SECRET@"
+events = ["case.submitted"]
+
+[ballerina.log]
+level = "INFO"

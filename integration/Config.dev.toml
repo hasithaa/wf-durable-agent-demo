@@ -1,0 +1,43 @@
+# Local development: no Thunder (services trust x-user-* headers), H2 files, the scripted model,
+# and `temporal server start-dev` on localhost:7233.
+
+[tenantapp.maintenance]
+serviceApiKey = "demo-service-key"
+webhookSecret = "demo-webhook-secret"
+
+[tenantapp.maintenance.db]
+url = "jdbc:h2:./target/data/tenant-app;AUTO_SERVER=TRUE"
+
+[ballerina.workflow]
+mode = "LOCAL"
+url = "localhost:7233"
+namespace = "default"
+taskQueue = "TENANT_MAINTENANCE"
+
+[commons.notification.server]
+ns = "tenant-app"
+[commons.notification.server.db]
+url = "jdbc:h2:./target/data/tenant-app;AUTO_SERVER=TRUE"
+
+[commons.chat.server]
+ns = "tenant-app"
+[commons.chat.server.db]
+url = "jdbc:h2:./target/data/tenant-app;AUTO_SERVER=TRUE"
+[[commons.chat.server.webhooks]]
+participantId = "agent:maintenance"
+url = "http://localhost:9090/hooks/chat"
+secret = "demo-webhook-secret"
+events = ["message.created", "form.submitted"]
+
+[commons.attachment.server]
+ns = "tenant-app"
+adminRoles = [
+    {role = "PropertyManager", permissions = ["read", "delete", "reopen", "close"]}
+]
+[commons.attachment.server.db]
+url = "jdbc:h2:./target/data/tenant-app;AUTO_SERVER=TRUE"
+[[commons.attachment.server.webhooks]]
+participantId = "agent:maintenance"
+url = "http://localhost:9090/hooks/attachments"
+secret = "demo-webhook-secret"
+events = ["case.submitted"]

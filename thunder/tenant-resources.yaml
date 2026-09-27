@@ -1,0 +1,147 @@
+# The tenant app's identity, declared: the cast, their groups (the roles the services gate on) and the portal.
+#
+# Thunder loads this multi-document YAML at startup; declarative resources are read-only at runtime.
+# ${PORTAL_REDIRECT_URI} is rendered by the compose entrypoint (Thunder does not substitute it in a startup file).
+# Group NAMES travel in the token's `groups` claim and are used as role names as they are.
+
+resource_type: user
+id: user-tara
+type: Person
+ouId: 01900000-0000-7000-8000-000000000001
+attributes:
+  username: tara
+  email: tara@tenant-app.dev
+  given_name: Tara
+  family_name: Lee
+credentials:
+  password: "tara12345"
+---
+resource_type: user
+id: user-carlos
+type: Person
+ouId: 01900000-0000-7000-8000-000000000001
+attributes:
+  username: carlos
+  email: carlos@tenant-app.dev
+  given_name: Carlos
+  family_name: Diaz
+credentials:
+  password: "carlos12345"
+---
+resource_type: user
+id: user-erin
+type: Person
+ouId: 01900000-0000-7000-8000-000000000001
+attributes:
+  username: erin
+  email: erin@tenant-app.dev
+  given_name: Erin
+  family_name: Volt
+credentials:
+  password: "erin12345"
+---
+resource_type: user
+id: user-priya
+type: Person
+ouId: 01900000-0000-7000-8000-000000000001
+attributes:
+  username: priya
+  email: priya@tenant-app.dev
+  given_name: Priya
+  family_name: Shah
+credentials:
+  password: "priya12345"
+---
+resource_type: user
+id: user-fernando
+type: Person
+ouId: 01900000-0000-7000-8000-000000000001
+attributes:
+  username: fernando
+  email: fernando@tenant-app.dev
+  given_name: Fernando
+  family_name: Ruiz
+credentials:
+  password: "fernando12345"
+---
+resource_type: group
+id: group-tenant
+name: Tenant
+description: Reports problems and chats with the maintenance assistant
+ouId: 01900000-0000-7000-8000-000000000001
+members:
+  - id: user-tara
+    type: user
+---
+resource_type: group
+id: group-contractor
+name: Contractor
+description: Quotes and fixes jobs the assistant sends
+ouId: 01900000-0000-7000-8000-000000000001
+members:
+  - id: user-carlos
+    type: user
+  - id: user-erin
+    type: user
+---
+resource_type: group
+id: group-propertymanager
+name: PropertyManager
+description: Oversees every request; sees evidence and escalations
+ouId: 01900000-0000-7000-8000-000000000001
+members:
+  - id: user-priya
+    type: user
+---
+resource_type: group
+id: group-finance
+name: Finance
+description: Approves quotes above the threshold
+ouId: 01900000-0000-7000-8000-000000000001
+members:
+  - id: user-fernando
+    type: user
+---
+resource_type: application
+id: app-tenant-portal
+name: Tenant Maintenance Portal
+type: browser
+ouId: 01900000-0000-7000-8000-000000000001
+authFlowHandle: default-flow
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: tenant-portal
+      redirectUris:
+        - "${PORTAL_REDIRECT_URI}"
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      publicClient: true
+      pkceRequired: true
+      # The groups claim is opt-in twice: listed as a token attribute, and released through a scope mapping.
+      token:
+        accessToken:
+          userConfig:
+            attributes:
+              - username
+              - email
+              - given_name
+              - groups
+        idToken:
+          userAttributes:
+            - username
+            - email
+            - given_name
+            - groups
+      scopeClaims:
+        groups:
+          - groups
+        profile:
+          - username
+          - given_name
+        email:
+          - email
