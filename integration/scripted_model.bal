@@ -1,21 +1,9 @@
-import ballerina/ai;
 import ballerina/lang.runtime;
-import ballerina/log;
 import ballerina/random;
 
 // With no WSO2 AI token the agent talks to this scripted stand-in, served at /mockllm in this process over the
 // provider's chat-completions protocol. It walks the maintenance case deterministically, so the demo runs the
 // same way every time; the agent, its tools and its durability are exactly the same either way.
-
-isolated function selectModel() returns ai:ModelProvider|error {
-    ai:Wso2ModelProvider|ai:Error wso2 = ai:getDefaultModelProvider();
-    if wso2 is ai:Wso2ModelProvider {
-        log:printInfo("Maintenance agent uses the WSO2 default model provider");
-        return wso2;
-    }
-    log:printInfo("No WSO2 AI token configured; the maintenance agent uses the scripted model");
-    return new ai:Wso2ModelProvider(scriptedModelUrl, "scripted");
-}
 
 isolated function thinkPause() {
     if scriptedThinkSeconds > 0d {
@@ -32,7 +20,7 @@ type PlannedCall record {|
 type Facts record {|
     CaseInput? input = ();
     Contractor? contractor = ();
-    string? contractorConversationId = ();
+    boolean contractorEngaged = false;
     boolean quoteAccepted = false;
 |};
 
@@ -68,13 +56,12 @@ isolated function scriptedTurn(json[] messages) returns map<json> {
 }
 
 isolated function planTurn(CaseInput input, Facts facts, Turn turn) returns PlannedCall[] {
-    string tenantConversation = input.conversationId;
     string caseRef = input.caseRef;
     string first = firstName(input.tenantName);
     CaseEvent? event = turn.event;
     if event is () {
         return [
-            say(tenantConversation, string `Hi ${first}, I'm the maintenance assistant. I've logged ${caseRef} for `
+            say(caseRef, "tenant", string `Hi ${first}, I'm the maintenance assistant. I've logged ${caseRef} for `
                 + string `unit ${input.unit}. Could you upload a photo of the problem using the card below?`),
             {name: "requestEvidence", args: {caseRef, instructions: "A clear photo of the problem helps us send "
                 + "the right tradesperson."}},
@@ -83,12 +70,12 @@ isolated function planTurn(CaseInput input, Facts facts, Turn turn) returns Plan
         ];
     }
     Contractor? contractor = facts.contractor;
-    string? contractorConversation = facts.contractorConversationId;
+    boolean engaged = facts.contractorEngaged;
     string trade = tradeFor(input.issue);
     match event.kind {
         "EVIDENCE" => {
             PlannedCall[] plan = [
-                say(tenantConversation, string `Thanks for the photo. This looks like a ${trade} job, so I'm `
+                say(caseRef, "tenant", string `Thanks for the photo. This looks like a ${trade} job, so I'm `
                     + "finding a tradesperson now."),
                 {name: "findContractor", args: {trade}}
             ];
@@ -99,30 +86,18 @@ isolated function planTurn(CaseInput input, Facts facts, Turn turn) returns Plan
             plan.push({name: "openContractorChat", args: {caseRef, contractorId: found.userId,
                 summary: string `Hi ${firstName(found.name)}, new ${trade} job ${caseRef} at unit ${input.unit}: `
                     + string `${input.issue} The tenant has sent a photo. Could you quote for it?`}});
-            string? opened = stripQuotes(turn.results["openContractorChat"]) ?: contractorConversation;
-            if opened is () {
+            if turn.results["openContractorChat"] is () && !engaged {
                 return plan;
             }
-            return [...plan,
-                {name: "requestQuote", args: {conversationId: opened}},
-                {name: "scheduleFollowUp", args: {caseRef, hours: 48, reason: "No quote from the contractor yet"}}
-            ];
+            return [...plan, {name: "requestQuote", args: {caseRef}}];
         }
         "REMINDER" => {
-            if facts.quoteAccepted || contractorConversation is () || quoteReceived(turn, facts) {
-                return [];
-            }
-            return [
-                {name: "notifyRole", args: {caseRef, role: "PropertyManager",
-                    title: string `No contractor reply on ${caseRef}`,
-                    body: string `${contractor?.name ?: "The contractor"} has not quoted after 48 hours.`,
-                    severity: "WARNING"}},
-                say(contractorConversation, "Friendly reminder: could you send your quote for this job?")
-            ];
+            return [say(caseRef, "tenant", string `${contractor?.name ?: "The contractor"} hasn't sent a quote yet. `
+                + "I've chased them and let the property manager know.")];
         }
-        "FORM_RESPONSE" => {
+        "QUOTE"|"FIX_CONFIRMATION" => {
             json values = event?.data;
-            if event.'from == "tenant" {
+            if event.kind == "FIX_CONFIRMATION" {
                 json fixed = values is map<json> ? values["fixed"] : ();
                 if fixed == true {
                     return [
@@ -135,76 +110,55 @@ isolated function planTurn(CaseInput input, Facts facts, Turn turn) returns Plan
                     ];
                 }
                 string comment = values is map<json> && values["comment"] is string ? <string>values["comment"] : "";
-                if contractorConversation is () {
-                    return [];
-                }
                 return [
-                    say(contractorConversation, string `The tenant says it is not fixed yet. ${comment}`),
-                    say(tenantConversation, "Sorry about that. I've asked the contractor to come back.")
+                    say(caseRef, "contractor", string `The tenant says it is not fixed yet. ${comment}`),
+                    say(caseRef, "tenant", "Sorry about that. I've asked the contractor to come back.")
                 ];
             }
-            if contractorConversation is () {
-                return [];
-            }
             decimal amount = amountOf(values);
-            string visitDate = values is map<json> && values["visitDate"] is string ? <string>values["visitDate"] : "soon";
             string name = contractor?.name ?: "The contractor";
-            PlannedCall[] accepted = [
-                say(contractorConversation, string `Approved. Please go ahead on ${visitDate}.`),
-                say(tenantConversation, string `Good news: ${name} will visit on ${visitDate} to fix it.`),
-                {name: "notifyUser", args: {caseRef, userId: input.tenantId, title: string `Visit booked for ${caseRef}`,
-                    body: string `${name} visits on ${visitDate}.`, severity: "SUCCESS"}}
-            ];
             if amount <= quoteApprovalThreshold {
-                return accepted;
+                return [{name: "bookVisit", args: {caseRef}}];
             }
             PlannedCall[] plan = [
-                say(tenantConversation, string `${name} quoted $${amount}. That needs a quick approval from `
+                say(caseRef, "tenant", string `${name} quoted $${amount}. That needs a quick approval from `
                     + "Finance; I'll let you know."),
-                {name: "approveQuote", args: {caseRef, amount, contractor: name, visitDate,
-                    notes: values is map<json> && values["notes"] is string ? <string>values["notes"] : ""}}
+                {name: "bookApprovedVisit", args: {caseRef}}
             ];
-            string? decision = turn.results["approveQuote"];
-            if decision is () {
+            string? booking = turn.results["bookApprovedVisit"];
+            if booking is () || !booking.startsWith("Error") {
                 return plan;
             }
-            if decision.includes("\"approved\":true") || decision.includes("\"approved\": true") {
-                return [...plan, ...accepted];
-            }
             return [...plan,
-                say(contractorConversation, "Finance declined this quote. Could you send a revised one?"),
-                say(tenantConversation, "Finance asked for a revised quote; I'm on it."),
-                {name: "requestQuote", args: {conversationId: contractorConversation}}
+                say(caseRef, "contractor", "Finance declined this quote. Could you send a revised one?"),
+                say(caseRef, "tenant", "Finance asked for a revised quote; I'm on it."),
+                {name: "requestQuote", args: {caseRef}}
             ];
         }
         _ => {
-            string? origin = event?.conversationId;
-            if event.'from == "contractor" && contractorConversation is string {
+            if event.'from == "contractor" {
                 if facts.quoteAccepted {
                     return [
-                        say(tenantConversation, string `${contractor?.name ?: "The contractor"} says the job is `
+                        say(caseRef, "tenant", string `${contractor?.name ?: "The contractor"} says the job is `
                             + "done. Can you confirm it's fixed?"),
-                        {name: "requestFixConfirmation", args: {conversationId: tenantConversation}}
+                        {name: "requestFixConfirmation", args: {caseRef}}
                     ];
                 }
-                return [say(contractorConversation, "Thanks! Please send your quote using the form above.")];
+                return [say(caseRef, "contractor", "Thanks! Please send your quote using the form above.")];
             }
-            if origin is () {
-                return [];
-            }
-            return [say(origin, statusLine(input, facts))];
+            return [say(caseRef, "tenant", statusLine(input, facts))];
         }
     }
 }
 
-isolated function say(string conversationId, string text) returns PlannedCall =>
-    {name: "sendMessage", args: {conversationId, text}};
+isolated function say(string caseRef, string to, string text) returns PlannedCall =>
+    {name: "sendMessage", args: {caseRef, to, text}};
 
 isolated function statusLine(CaseInput input, Facts facts) returns string {
     if facts.quoteAccepted {
         return string `The visit for ${input.caseRef} is booked; I'll check in with you once it's done.`;
     }
-    if facts.contractorConversationId is string {
+    if facts.contractorEngaged {
         return string `I've contacted ${facts.contractor?.name ?: "a contractor"} and I'm waiting for their quote.`;
     }
     return "Thanks! Once you upload a photo I'll find the right tradesperson.";
@@ -237,10 +191,6 @@ isolated function scan(json[] messages) returns [Facts, Turn] {
                 continue;
             }
             turn = {event};
-            if event is CaseEvent && event.'from == "contractor" && event.kind == "FORM_RESPONSE"
-                    && amountOf(event?.data) <= quoteApprovalThreshold {
-                facts.quoteAccepted = true;
-            }
             continue;
         }
         if role == "assistant" {
@@ -269,10 +219,9 @@ isolated function scan(json[] messages) returns [Facts, Turn] {
             turn.results[name] = content;
             if name == "findContractor" {
                 facts.contractor = contractorFrom(content);
-            } else if name == "openContractorChat" {
-                facts.contractorConversationId = stripQuotes(content);
-            } else if name == "approveQuote" && (content.includes("\"approved\":true")
-                    || content.includes("\"approved\": true")) {
+            } else if name == "openContractorChat" && !content.startsWith("Error") {
+                facts.contractorEngaged = true;
+            } else if (name == "bookVisit" || name == "bookApprovedVisit") && content.startsWith("Booked") {
                 facts.quoteAccepted = true;
             }
         }

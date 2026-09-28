@@ -8,12 +8,12 @@ type CaseInput record {|
     string conversationId;
 |};
 
-// Everything that reaches the agent arrives as one of these on its `chat` event: people's messages and form
-// answers from the chat service, submitted photos from the attachment service, and follow-up reminders.
+// Everything that reaches the agent arrives as one of these on its `chat` event: people's messages, the
+// contractor's quote and the tenant's fix confirmation (form answers), submitted photos, and follow-up reminders.
 type CaseEvent record {|
     "tenant"|"contractor"|"system" 'from;
     string senderId;
-    "MESSAGE"|"FORM_RESPONSE"|"EVIDENCE"|"REMINDER" kind;
+    "MESSAGE"|"QUOTE"|"FIX_CONFIRMATION"|"EVIDENCE"|"REMINDER" kind;
     string text;
     string conversationId?;
     json data?;
@@ -25,7 +25,16 @@ type Contractor record {|
     string trade;
 |};
 
-// Finance's answer to an over-threshold quote.
+// A contractor's quote, as submitted in the quote form.
+type Quote record {|
+    string caseRef;
+    decimal amount;
+    string contractor;
+    string visitDate;
+    string? notes;
+|};
+
+// Finance's decision on an over-threshold booking.
 type QuoteDecision record {|
     boolean approved;
     string comment?;

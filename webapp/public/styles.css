@@ -78,3 +78,8 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: v
 .toast { position: fixed; bottom: 16px; right: 16px; background: var(--text); color: var(--bg); padding: 10px 14px;
   border-radius: 8px; opacity: .92; }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; height: auto; } .side, .sidebar { border: none; } }
+
+/* bal-commons components */
+commons-conversation { flex: 1; min-height: 0; }
+commons-inbox { border: none; }
+commons-upload-case { margin-top: 6px; }

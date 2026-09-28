@@ -3,7 +3,7 @@
 A tenant reports a leak. An AI maintenance agent owns the request from that moment until the tenant confirms the fix:
 - it collects photos,
 - it finds a plumber and gets a quote,
-- it asks Finance to approve a quote over the threshold,
+- it books a visit, but only after Finance approves a quote over the threshold,
 - it chases the plumber when they go quiet, and books the visit.
 
 This can take days. Kill the process in the middle, and the agent carries on where it was.
@@ -36,10 +36,10 @@ Central. The agent uses them like any other client: typed clients going out, sig
 | Tara reports a leak; the agent greets her and asks for a photo | An agent instance per request; everything reaches it as a `chat` event |
 | She uploads a photo; the agent picks a plumber, opens a chat with him and sends a quote form | Waits for an external event (attachment webhook), tool calls, several conversations at once |
 | Nobody answers for "48 hours" (2 minutes) | A durable timer workflow wakes the agent; it escalates to PropertyManager |
-| Carlos quotes $850 | Over the threshold: a human task for Finance; the agent parks |
+| Carlos quotes $850 | Over the threshold: the agent calls `bookApprovedVisit`, whose approval policy parks the call on Finance's review |
 | Tara asks "any update?" while it waits | The parked agent answers a side question without losing its place |
 | **Kill the integration and start it again** | Nothing is lost; the agent is still waiting for Finance |
-| Fernando approves | The agent books the visit with both parties |
+| Fernando approves | The parked call runs: the visit is booked with both parties |
 | Carlos reports done, Tara confirms in a form | The agent closes both chats and the upload case, and ends |
 
 Every message the agent sends is a durable activity, streamed word by word into the chat. A retried activity reuses
@@ -58,9 +58,8 @@ open http://localhost:9095
 - Sign in as any persona. Use **Switch user** to change.
 - To watch the agent's history: `docker compose --profile ui up -d temporal-ui`, then open http://localhost:8233.
 - **Crash scene:** `docker compose kill integration && docker compose up -d integration`.
-- **A real LLM:** put a WSO2 AI token in `.env` (git-ignored) (`WSO2_AI_SERVICE_URL`, `WSO2_AI_TOKEN`), then run
-  `docker compose up -d integration`. With no token the agent uses a scripted model that plays the same case the
-  same way every time.
+- **The model.** `build.sh` asks which one to use and writes it to `.env` as `MODEL_PROVIDER` (see
+  [Models](#models)).
 
 ### Without Docker
 
@@ -73,11 +72,42 @@ open http://localhost:5173 # switch personas top right; no sign-in
 
 `./scripts/reset-dev.sh` forgets every request.
 
+### Try the UI components
+
+In dev mode, http://localhost:5173/playground.html puts every commons component on one page, against the running
+services: send yourself notifications, start a chat with a simulated agent that streams, sends forms and asks for
+uploads, and fill in an upload case. The log at the bottom shows the events the components fire.
+
 ### Headless
 
 `./scripts/walkthrough.sh` plays the whole case over the APIs, persona by persona:
 - `WAIT_REMINDER=1` also waits for the escalation.
 - `RESTART_CMD="…"` adds the crash scene.
+
+## Models
+
+| `MODEL_PROVIDER` | What drives the agent |
+|---|---|
+| `scripted` | A deterministic stand-in (`/mockllm`) that plays the same case the same way every time. The default in `.env.example` |
+| `ollama` | A local model in Docker: `docker compose --profile ollama up -d`. `build.sh` pulls `OLLAMA_MODEL` (default `qwen2.5:7b`, about 4.7 GB) |
+| `wso2` | WSO2's AI service: `WSO2_AI_SERVICE_URL` and `WSO2_AI_TOKEN` in `.env` (git-ignored) |
+| `auto` | `wso2` when a token is set, otherwise `scripted` |
+
+Ollama is reached through a small adapter (`/ollama` in `app.bal`), because the model provider speaks an older
+tool-call protocol. A 7B model follows the case but doesn't always pick the right tool at the quote step; the
+guardrails below keep that from doing harm, but the run can take extra turns. Pick another model with
+`OLLAMA_MODEL`, and check its license first: not every Qwen2.5 size is Apache-2.0.
+
+## Guardrails
+
+The model decides what to do next, but the rules that matter are enforced in code, not in the prompt:
+- **Booking.** `bookVisit` reads the quote from the chat and refuses one over the threshold. `bookApprovedVisit`
+  has an `approvalPolicy`, so every call waits for Finance to approve or reject it (with feedback) before it runs.
+- **Order of steps.** `requestFixConfirmation` needs a booked visit, and `closeRequest` needs the tenant's own
+  confirmation that the problem is fixed.
+- **Repeats.** `requestQuote` does nothing while a quote form is still open, and schedules the follow-up timer itself.
+- **Escalation.** When the timer fires, the reminder activity warns the PropertyManager role and nudges the
+  contractor, whatever the model then decides.
 
 ## How it fits together
 
@@ -89,23 +119,30 @@ open http://localhost:5173 # switch personas top right; no sign-in
                                    ├─ maintenanceAgent (DurableAgent)       one instance per request
                                    │    activities → commons clients (API key)
                                    ├─ /hooks  ◄─ signed webhooks (chat, attachment) → agent "chat" events
-                                   ├─ /app    requests, Finance tasks
-                                   └─ /mockllm scripted model (no token)
-                                  Temporal ◄── agent, follow-up timers, human tasks
+                                   ├─ /app    requests, Finance reviews
+                                   ├─ /mockllm scripted model
+                                   └─ /ollama  adapter to a local Ollama
+                                  Temporal ◄── agent, follow-up timers, reviews
                                   Thunder  ──► JWTs for people (groups = roles)
 ```
 
 | File | What it holds |
 |---|---|
-| `integration/agent.bal` | The agent: instructions, activities, the `chat` event, the `approveQuote` human task, the follow-up timer |
+| `integration/agent.bal` | The agent: instructions, activities (with the Finance approval policy), the `chat` event, the follow-up timer |
 | `integration/activities.bal` | Everything the agent does to the world |
 | `integration/app.bal` | Webhook receivers (verify → deduplicate → `sendData`), side-turn replies, the app API |
+| `integration/model.bal` | Model selection and the Ollama adapter |
 | `integration/scripted_model.bal` | The deterministic stand-in model |
-| `webapp/public/app.js` | The portal |
+| `webapp/public/app.js` | The portal: sign-in, requests, Finance reviews; the rest is commons components |
+| `webapp/public/vendor/` | The commons UI bundles, copied in by `scripts/vendor-ui.sh` |
+| `webapp/public/playground.html` | Every component on one page (dev mode) |
 | `thunder/tenant-resources.yaml` | Users, groups and the portal client |
 
 ## Things to know
 
+- **The portal is plain JS with no build step.** The bell, inbox, conversations, chat and upload cards are the
+  [bal-commons](https://github.com/bal-commons) Web Components, built on [Lit](https://lit.dev). Their bundles
+  are checked in under `webapp/public/vendor/`; `scripts/vendor-ui.sh` rebuilds them from local checkouts.
 - **Webhooks are delivered at least once.** The app records each event ID and ignores repeats, so the agent never
   sees an event twice.
 - **Where replies are posted.** A turn's final answer is posted back only when it is a real reply, which happens
@@ -114,6 +151,8 @@ open http://localhost:5173 # switch personas top right; no sign-in
 - **Transactions.** The commons services put every `transaction` block in `service_commons.db:atomic`. Ballerina
   starts one transaction coordinator per package that uses them, and a second one fails on its port. Code added to
   this integration must use `atomic` too.
+- **A durable agent turn has an iteration limit.** When the model goes over it, the whole agent run fails, not only
+  the turn. The instructions tell the model to stop once it has messaged people.
 - **A killed process can hold up the next task.** A SIGKILLed worker can leave a Temporal poll that takes the next
   task and holds it until it times out, which can be minutes. That's why the crash scene kills the process while
   the agent waits on Finance, and why `dev.sh` and `reset-dev.sh` stop the integration gracefully.
@@ -121,3 +160,9 @@ open http://localhost:5173 # switch personas top right; no sign-in
   MySQL, but that hasn't been tried yet.
 
 See `docs/demo-script.md` for the presenter's script.
+
+## License
+
+Apache-2.0. The portal ships Lit (BSD-3-Clause) inside the vendored bundles, and the integration jar contains H2
+and the PostgreSQL JDBC driver. The Docker images and the Ollama model come with their own licenses. `NOTICE` and
+`THIRD_PARTY_NOTICES.md` list them all.

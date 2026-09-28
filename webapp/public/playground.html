@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Component Playground</title>
+  <script src="config.js"></script>
+  <script type="module" src="vendor/notification-ui.bundle.js"></script>
+  <script type="module" src="vendor/chat-ui.bundle.js"></script>
+  <script type="module" src="vendor/attachment-ui.bundle.js"></script>
+  <style>
+    :root { --bg: #f5f6f8; --panel: #fff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb; --accent: #2563eb; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1218; --panel: #171b23; --text: #e6e8ec; --muted: #9aa3b2; --line: #2a303b; --accent: #6ea0ff; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--panel);
+      border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+    header strong { flex: 1; }
+    select, input, button { font: inherit; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px;
+      background: var(--panel); color: var(--text); }
+    button { cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px; }
+    section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+      display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    code { font-size: 12px; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .hint { color: var(--muted); font-size: 12px; }
+    .chat { height: 460px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .wide { grid-column: 1 / -1; }
+    #log { font: 12px ui-monospace, monospace; color: var(--muted); max-height: 120px; overflow: auto; white-space: pre-wrap; }
+    .theme { display: flex; gap: 6px; align-items: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>bal-commons component playground</strong>
+    <label>Acting as <select id="persona"></select></label>
+    <span class="theme">Accent <input id="accent" type="color" value="#2563eb"></span>
+    <commons-notification-bell id="bell"></commons-notification-bell>
+  </header>
+  <main>
+    <section>
+      <h2>Notifications · &lt;commons-inbox&gt;</h2>
+      <div class="actions">
+        <button class="primary" data-notify="USER">Send to me</button>
+        <button data-notify="ROLE">Send to my role</button>
+        <select id="severity"><option>INFO</option><option>WARNING</option><option>ERROR</option><option>SUCCESS</option></select>
+      </div>
+      <commons-inbox id="inbox"></commons-inbox>
+    </section>
+
+    <section>
+      <h2>Conversations · &lt;commons-conversation-list&gt;</h2>
+      <div class="actions"><button class="primary" id="new-chat">Start a chat with a playground agent</button></div>
+      <p class="hint">The agent is simulated from this page: it streams its reply, sends a form, and asks for a photo.</p>
+      <commons-conversation-list id="list"></commons-conversation-list>
+    </section>
+
+    <section class="wide">
+      <h2>Conversation · &lt;commons-conversation&gt;</h2>
+      <div class="actions">
+        <button data-agent="stream">Agent: streamed reply</button>
+        <button data-agent="form">Agent: send a form</button>
+        <button data-agent="upload">Agent: ask for a photo</button>
+        <button data-agent="typing">Agent: typing…</button>
+      </div>
+      <div class="chat"><commons-conversation id="chat"></commons-conversation></div>
+    </section>
+
+    <section>
+      <h2>Upload case · &lt;commons-upload-case&gt;</h2>
+      <div class="actions"><button class="primary" id="new-case">Create a case for me</button></div>
+      <p class="hint">Two slots: a required photo, and an optional PDF. Submit appears once the photo is in.</p>
+      <commons-upload-case id="case"></commons-upload-case>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <div id="log"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {configureAuth, devUser} from "./vendor/notification-ui.bundle.js";
+
+    const api = window.APP_CONFIG.api;
+    const PERSONAS = {
+      tara: ["Tenant"], carlos: ["Contractor"], priya: ["PropertyManager"], fernando: ["Finance"]
+    };
+    const AGENT = "agent:playground";
+    const $ = (id) => document.getElementById(id);
+    const log = (line) => { $("log").textContent = `${new Date().toLocaleTimeString()} ${line}\n` + $("log").textContent; };
+
+    if (window.APP_CONFIG.auth !== "dev") {
+      document.body.innerHTML = "<p style='padding:16px'>The playground needs dev mode (scripts/dev.sh): it creates sample "
+        + "data with trusted identity headers.</p>";
+      throw new Error("dev mode only");
+    }
+
+    const me = localStorage.getItem("persona") || "tara";
+    for (const id of Object.keys(PERSONAS)) {
+      $("persona").append(new Option(`${id} (${PERSONAS[id][0]})`, id, false, id === me));
+    }
+    $("persona").onchange = (e) => { localStorage.setItem("persona", e.target.value); location.reload(); };
+    configureAuth(devUser(me, PERSONAS[me]));
+
+    // The components, pointed at the services.
+    for (const id of ["bell", "inbox"]) $(id).setAttribute("base-url", api.notifications);
+    $("list").me = me;
+    $("list").setAttribute("base-url", api.chat);
+    $("chat").me = me;
+    $("chat").setAttribute("attachments-url", api.attachments);
+    $("chat").setAttribute("base-url", api.chat);
+    $("case").setAttribute("base-url", api.attachments);
+    $("list").addEventListener("commons-conversation-select", (e) => openChat(e.detail.conversation.id));
+    for (const name of ["commons-bell-click", "commons-notification-click", "commons-message-sent", "commons-form-submitted",
+        "commons-file-uploaded", "commons-case-submitted"]) {
+      document.addEventListener(name, (e) => log(`${name} ${JSON.stringify(e.detail ?? {}).slice(0, 120)}`));
+    }
+    $("accent").oninput = (e) => document.documentElement.style.setProperty("--bc-accent", e.target.value);
+
+    // Sample data, created as a service account (the playground is the "app").
+    const service = {"content-type": "application/json", "x-user-id": "playground", "x-user-scopes": "*"};
+    async function call(base, path, body) {
+      const response = await fetch(base + path, {method: "POST", headers: service, body: JSON.stringify(body)});
+      const text = await response.text();
+      if (!response.ok) throw new Error(`${response.status} ${text}`);
+      return text ? JSON.parse(text) : null;
+    }
+
+    document.querySelectorAll("[data-notify]").forEach((button) => button.onclick = async () => {
+      const toRole = button.dataset.notify === "ROLE";
+      await call(api.notifications, "/notifications", {
+        recipientType: toRole ? "ROLE" : "USER", recipientId: toRole ? PERSONAS[me][0] : me,
+        severity: $("severity").value, title: `${$("severity").value.toLowerCase()} for ${toRole ? PERSONAS[me][0] : me}`,
+        body: `Sent from the playground at ${new Date().toLocaleTimeString()}`
+      });
+      log(`sent a ${toRole ? "role" : "personal"} notification`);
+    });
+
+    let conversationId = localStorage.getItem(`playground-chat-${me}`);
+    function openChat(id) {
+      conversationId = id;
+      localStorage.setItem(`playground-chat-${me}`, id);
+      $("chat").setAttribute("conversation-id", id);
+      $("list").selected = id;
+    }
+    if (conversationId) openChat(conversationId);
+
+    $("new-chat").onclick = async () => {
+      const conversation = await call(api.chat, "/conversations", {
+        title: `Playground chat ${new Date().toLocaleTimeString()}`,
+        participants: [{participantId: me}, {participantType: "AGENT", participantId: AGENT, displayName: "Playground agent"}]
+      });
+      openChat(conversation.id);
+      await agentSay("Hi! I'm a simulated agent. Try the buttons above to see streaming, forms and uploads.");
+      log(`started conversation ${conversation.id}`);
+    };
+
+    async function agentSay(text) {
+      await call(api.chat, `/conversations/${conversationId}/messages`, {content: text, senderId: AGENT});
+    }
+
+    async function agentStream(text) {
+      const id = `pg-${Date.now()}`;
+      await call(api.chat, `/conversations/${conversationId}/messages`, {id, content: "", status: "STREAMING", senderId: AGENT});
+      for (const word of text.split(" ")) {
+        await call(api.chat, `/conversations/${conversationId}/messages/${id}/chunks`, {text: word + " ", senderId: AGENT});
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      await call(api.chat, `/conversations/${conversationId}/messages/${id}/complete`, {content: text, senderId: AGENT});
+    }
+
+    document.querySelectorAll("[data-agent]").forEach((button) => button.onclick = async () => {
+      if (!conversationId) return log("start a chat first");
+      switch (button.dataset.agent) {
+        case "stream":
+          await agentStream("This reply is streamed word by word, the way a durable agent's model output arrives in the chat.");
+          break;
+        case "form":
+          await call(api.chat, `/conversations/${conversationId}/messages`, {kind: "FORM", senderId: AGENT, content: {
+            title: "Book a visit", submitLabel: "Book", schema: {type: "object", required: ["date"], properties: {
+              date: {type: "string", format: "date", title: "Preferred date"},
+              slot: {type: "string", title: "Time of day", enum: ["Morning", "Afternoon", "Evening"]},
+              pets: {type: "boolean", title: "There are pets at home"},
+              notes: {type: "string", title: "Notes"}}}}});
+          break;
+        case "upload": {
+          const created = await createCase();
+          await call(api.chat, `/conversations/${conversationId}/messages`,
+            {kind: "ATTACHMENT_REF", senderId: AGENT, content: {name: "Upload a photo", caseId: created.id, slot: "photo"}});
+          break;
+        }
+        case "typing":
+          await call(api.chat, `/conversations/${conversationId}/typing`, {senderId: AGENT});
+          break;
+      }
+      log(`agent: ${button.dataset.agent}`);
+    });
+
+    function createCase() {
+      return call(api.attachments, "/cases", {
+        title: "Playground upload", subjects: [me], watchers: ["playground"],
+        slots: [{name: "photo", label: "A photo", mimeTypes: ["image/*"], maxFiles: 2},
+                {name: "receipt", label: "A receipt (optional)", mimeTypes: ["application/pdf"], minFiles: 0}]
+      });
+    }
+    $("new-case").onclick = async () => {
+      const created = await createCase();
+      $("case").setAttribute("case-id", created.id);
+      log(`created case ${created.id}`);
+    };
+  </script>
+</body>
+</html>

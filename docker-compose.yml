@@ -81,6 +81,18 @@ services:
     ports:
       - "${THUNDER_PORT:-8090}:8090"
 
+  # ── Local model (profile: ollama; build.sh pulls the model into the volume) ──
+  ollama:
+    image: ollama/ollama:${OLLAMA_TAG:-latest}
+    profiles: [ollama]
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
   # ── The app ─────────────────────────────────────────────────────────────────
   # One process: notification, chat and attachment services, the durable maintenance agent and the app API.
   integration:
@@ -95,6 +107,9 @@ services:
       SERVICE_API_KEY: ${SERVICE_API_KEY:-tenant-app-service-key}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-tenant-app-webhook-secret}
       DEMO_SECONDS_PER_HOUR: ${DEMO_SECONDS_PER_HOUR:-2.5}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-auto}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       WSO2_AI_SERVICE_URL: ${WSO2_AI_SERVICE_URL:-}
       WSO2_AI_TOKEN: ${WSO2_AI_TOKEN:-}
     volumes:
@@ -104,6 +119,9 @@ services:
         condition: service_healthy
       thunder:
         condition: service_started
+      ollama:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' localhost:9090/app/requests | grep -q 401"]
       interval: 5s
@@ -124,6 +142,7 @@ services:
         condition: service_healthy
 
 volumes:
+  ollama-models:
   temporal-postgres-data:
   thunder-data:
   thunder-db:

@@ -28,6 +28,11 @@ final sdb:Migration[] & readonly migrations = [
                 conversation_id VARCHAR(26) NOT NULL,
                 answered INT NOT NULL)`
         ]
+    },
+    {
+        version: 2,
+        description: "the conversation position each turn started at",
+        statements: ["ALTER TABLE {prefix}turn ADD COLUMN after_seq BIGINT"]
     }
 ];
 
@@ -47,6 +52,7 @@ type TurnRow record {|
     string token;
     string case_ref;
     string conversation_id;
+    int? after_seq;
 |};
 
 final jdbc:Client appDb = check sdb:connect(db);
@@ -118,9 +124,9 @@ isolated function firstDelivery(string eventId) returns boolean|error {
     return true;
 }
 
-isolated function recordTurn(string token, string caseRef, string conversationId) returns error? {
-    _ = check appDb->execute(`INSERT INTO mr_turn (token, case_ref, conversation_id, answered)
-        VALUES (${token}, ${caseRef}, ${conversationId}, 0)`);
+isolated function recordTurn(string token, string caseRef, string conversationId, int afterSeq) returns error? {
+    _ = check appDb->execute(`INSERT INTO mr_turn (token, case_ref, conversation_id, answered, after_seq)
+        VALUES (${token}, ${caseRef}, ${conversationId}, 0, ${afterSeq})`);
 }
 
 isolated function markTurnAnswered(string token) returns error? {
@@ -128,7 +134,7 @@ isolated function markTurnAnswered(string token) returns error? {
 }
 
 isolated function unansweredTurns() returns TurnRow[]|error {
-    stream<TurnRow, sql:Error?> rows = appDb->query(`SELECT token, case_ref, conversation_id FROM mr_turn
+    stream<TurnRow, sql:Error?> rows = appDb->query(`SELECT token, case_ref, conversation_id, after_seq FROM mr_turn
         WHERE answered = 0`);
     return from TurnRow row in rows select row;
 }

@@ -40,9 +40,14 @@ for m in json.load(sys.stdin)["items"]:
     print(m["seq"], m["senderId"], m["kind"], c[:150])'
 }
 
-agent_says() {  # conversationId text persona...
-  local id=$1 text=$2; shift 2
-  messages "$id" "$@" | grep "agent:maintenance" | grep -F -- "$text" | head -1
+agent_after() {  # conversationId seq persona... -> the first agent message after seq
+  local id=$1 seq=$2; shift 2
+  messages "$id" "$@" | awk -v s="$seq" '$1 > s && $2 == "agent:maintenance"' | head -1
+}
+
+last_seq() {  # conversationId persona...
+  local id=$1; shift
+  messages "$id" "$@" | tail -1 | cut -d' ' -f1
 }
 
 inbox() {  # persona... -> "severity title"
@@ -90,12 +95,13 @@ if [ -n "${RESTART_CMD:-}" ]; then
 fi
 
 step "6. Tara asks for an update while the agent waits on Finance"
-curl -sf -X POST "$CHAT/conversations/$tenantChat/messages" "${json[@]}" "${tara[@]}" -d '{"content":"Any update? The floor is getting wet."}' >/dev/null
-wait_for "the side reply" bash -c "$(declare -f messages agent_says); CHAT=$CHAT agent_says $tenantChat 'on it' -H 'x-user-id: tara'"; echo
+asked=$(curl -sf -X POST "$CHAT/conversations/$tenantChat/messages" "${json[@]}" "${tara[@]}" -d '{"content":"Any update? The floor is getting wet."}' | field 'd["seq"]')
+wait_for "the side reply" bash -c "$(declare -f messages agent_after); CHAT=$CHAT agent_after $tenantChat $asked -H 'x-user-id: tara'"; echo
 
 step "7. Fernando approves"
+before=$(last_seq "$tenantChat" "${tara[@]}")
 curl -sf -X POST "$APP/app/tasks/$task/complete" "${json[@]}" "${fernando[@]}" -d '{"approved":true,"comment":"OK within budget"}' >/dev/null
-wait_for "the booking" bash -c "$(declare -f messages agent_says); CHAT=$CHAT agent_says $tenantChat 'Good news' -H 'x-user-id: tara'"; echo
+wait_for "the booking" bash -c "$(declare -f messages agent_after); CHAT=$CHAT agent_after $tenantChat $before -H 'x-user-id: tara'"; echo
 
 step "8. Carlos reports the job done; Tara confirms"
 curl -sf -X POST "$CHAT/conversations/$contractorChat/messages" "${json[@]}" "${carlos[@]}" -d '{"content":"All fixed, new trap fitted."}' >/dev/null

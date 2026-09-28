@@ -21,6 +21,16 @@ configurable sdb:DbConfig db = {};
 configurable decimal quoteApprovalThreshold = 500;
 # Compresses the agent's follow-up delays: seconds per hour, so 48 h is 2 minutes at 2.5.
 configurable decimal demoSecondsPerHour = 2.5;
+# The agent's model: `auto` uses the WSO2 provider when its token is configured and the scripted model otherwise.
+configurable "auto"|"scripted"|"ollama"|"wso2" modelProvider = "auto";
+# Ollama server, when modelProvider is `ollama`.
+configurable string ollamaUrl = "http://localhost:11434";
+# Ollama model; it must support tool calling.
+configurable string ollamaModel = "qwen2.5:7b";
+# The app's Ollama adapter, as the agent's model provider reaches it.
+configurable string ollamaBridgeUrl = "http://localhost:9090/ollama";
+# Ollama context window in tokens; its 2048 default silently cuts off the agent's instructions and tools.
+configurable int ollamaContextSize = 16384;
 # Scripted model endpoint, used when no WSO2 AI token is configured.
 configurable string scriptedModelUrl = "http://localhost:9090/mockllm";
 # Believable "thinking" pause of each scripted model call.

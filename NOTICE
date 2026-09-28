@@ -1,0 +1,13 @@
+Tenant Maintenance: a durable AI agent demo
+Copyright 2026 Hasitha Aravinda
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This repository includes third-party software:
+  - webapp/public/vendor/*.bundle.js: the @bal-commons UI components (Apache-2.0), which bundle Lit
+    (BSD-3-Clause, Copyright (c) 2017 Google LLC).
+
+The integration built by build.sh includes the H2 database engine (MPL-2.0 / EPL-1.0) and the PostgreSQL JDBC
+driver (BSD-2-Clause), with Ballerina libraries (Apache-2.0).
+
+See THIRD_PARTY_NOTICES.md for the full list, license texts and the software the demo downloads at run time.

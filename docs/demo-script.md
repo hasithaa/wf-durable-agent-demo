@@ -36,9 +36,10 @@ Optionally keep Temporal's UI open (http://localhost:8233) to show the agent's h
 6. As **Carlos**, open the MR-1001 chat and fill in the quote form:
    - amount: `850`
    - visit date: any date
-7. Tara's chat says the quote needs approval. As **Fernando**, *Approvals* shows the task with the quote details.
-   > $850 is over the $500 threshold, so the agent created a human task for Finance. It's parked now. It holds no
-   > thread and uses no model while it waits, and the wait could last days.
+7. Tara's chat says the quote needs approval. As **Fernando**, *Approvals* shows the booking with the quote details.
+   > $850 is over the $500 threshold. `bookVisit` refuses it, so the agent calls `bookApprovedVisit`, and that
+   > activity's approval policy parks the call on Finance. The agent holds no thread and uses no model while it
+   > waits, and the wait could last days.
 
 ## 5. The crash
 
@@ -55,7 +56,8 @@ Optionally keep Temporal's UI open (http://localhost:8233) to show the agent's h
 
 ## 6. Approval and resolution
 
-11. As **Fernando**, click **Approve**. The agent confirms the visit with Carlos and with Tara, and Tara gets a
+11. As **Fernando**, click **Approve**. (**Decline** rejects the call, with your comment as the feedback the agent
+    sees.) The agent confirms the visit with Carlos and with Tara, and Tara gets a
     *Visit booked* notification.
 12. As **Carlos**, write "All fixed". The agent asks Tara to confirm with an *Is it fixed?* form.
 13. As **Tara**, tick *The problem is fixed* and confirm. The agent closes both chats and the upload case. Priya gets

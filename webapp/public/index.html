@@ -6,12 +6,15 @@
   <title>Tenant Maintenance</title>
   <link rel="stylesheet" href="styles.css">
   <script src="config.js"></script>
+  <script type="module" src="vendor/notification-ui.bundle.js"></script>
+  <script type="module" src="vendor/chat-ui.bundle.js"></script>
+  <script type="module" src="vendor/attachment-ui.bundle.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">🔧 Tenant Maintenance</div>
     <div class="who" id="who"></div>
-    <button class="bell" id="bell" title="Notifications">🔔 <span class="badge" id="badge" hidden>0</span></button>
+    <commons-notification-bell id="bell"></commons-notification-bell>
   </header>
   <main class="layout">
     <nav class="sidebar">
@@ -30,20 +33,12 @@
       </section>
       <section>
         <h2>Conversations</h2>
-        <ul class="list" id="conversations"></ul>
+        <commons-conversation-list id="conversations"></commons-conversation-list>
       </section>
     </nav>
     <section class="main" id="main">
       <div class="empty" id="empty">Select a conversation or a request.</div>
-      <div class="chat" id="chat" hidden>
-        <div class="chat-head" id="chat-head"></div>
-        <div class="messages" id="messages"></div>
-        <div class="typing" id="typing" hidden>Maintenance assistant is typing…</div>
-        <form class="composer" id="composer">
-          <input name="text" placeholder="Write a message…" autocomplete="off">
-          <button type="submit">Send</button>
-        </form>
-      </div>
+      <commons-conversation id="chat" hidden></commons-conversation>
       <div class="detail" id="detail" hidden></div>
     </section>
     <aside class="side">
@@ -53,16 +48,10 @@
       </section>
       <section>
         <h2>Inbox</h2>
-        <div class="tabs" id="inbox-tabs">
-          <button data-box="all" class="active">All</button>
-          <button data-box="personal">Personal</button>
-          <button data-box="role">Roles</button>
-          <button id="read-all" class="link">Mark all read</button>
-        </div>
-        <ul class="list inbox" id="inbox"></ul>
+        <commons-inbox id="inbox"></commons-inbox>
       </section>
     </aside>
   </main>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
