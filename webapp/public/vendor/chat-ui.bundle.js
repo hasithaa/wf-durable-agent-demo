@@ -1273,6 +1273,20 @@ var zt = class extends $ {
 				reflect: !0
 			},
 			me: { type: String },
+			status: { type: String },
+			correlationId: {
+				type: String,
+				attribute: "correlation-id"
+			},
+			searchable: { type: Boolean },
+			query: {
+				state: !0,
+				attribute: !1
+			},
+			loaded: {
+				state: !0,
+				attribute: !1
+			},
 			items: {
 				state: !0,
 				attribute: !1
@@ -1284,12 +1298,12 @@ var zt = class extends $ {
 		};
 	}
 	constructor() {
-		super(), this.baseUrl = "", this.items = [];
+		super(), this.baseUrl = "", this.items = [], this.searchable = !1, this.query = "", this.loaded = !1;
 	}
 	static {
 		this.styles = [Ue, Je`
     :host { display: block; }
-    ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
     li { padding: 8px 10px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; }
     li:hover { background: var(--_surface); }
     li[aria-selected="true"] { border-color: var(--_accent); background: var(--_accent-soft); }
@@ -1299,6 +1313,8 @@ var zt = class extends $ {
     .unread { background: var(--_accent); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 11px; }
     .closed { font-size: 11px; color: var(--_muted); }
     .meta { font-size: 12px; color: var(--_muted); }
+    input[type=search] { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 8px;
+      margin-bottom: 6px; border: 1px solid var(--_border); border-radius: 6px; background: var(--_bg); color: var(--_fg); }
     .empty, .error { padding: 12px; font-size: 13px; color: var(--_muted); }
     .error { color: var(--_error); }
   `];
@@ -1310,11 +1326,15 @@ var zt = class extends $ {
 		super.disconnectedCallback(), this.unsubscribe?.();
 	}
 	updated(e) {
-		e.has("baseUrl") && this.baseUrl && this.isConnected && this.start();
+		e.has("baseUrl") && this.baseUrl && this.isConnected ? this.start() : (e.has("status") || e.has("correlationId")) && this.baseUrl && this.isConnected && this.reload();
 	}
 	async reload() {
 		try {
-			this.items = (await new Ft(this.baseUrl, this.auth).listConversations({ limit: 50 })).items, this.error = void 0;
+			this.items = (await new Ft(this.baseUrl, this.auth).listConversations({
+				limit: 50,
+				status: this.status || void 0,
+				correlationId: this.correlationId || void 0
+			})).items, this.error = void 0, this.loaded = !0;
 		} catch (e) {
 			this.error = e.message;
 		}
@@ -1332,20 +1352,23 @@ var zt = class extends $ {
 		}));
 	}
 	render() {
-		return this.error ? K`<div class="error" role="alert">${this.error}</div>` : this.items.length ? K`<ul part="list" role="listbox" aria-label="Conversations">
-      ${this.items.map((e) => {
-			let t = e.participants.filter((e) => e.participantId !== this.me).map((e) => e.displayName || e.participantId).join(", ");
-			return K`<li part="item" role="option" tabindex="0" aria-selected=${this.selected === e.id}
+		if (this.error) return K`<div class="error" role="alert">${this.error}</div>`;
+		let e = this.searchable ? K`<input type="search" part="search" placeholder="Search conversations"
+        aria-label="Search conversations" .value=${this.query}
+        @input=${(e) => {
+			this.query = e.target.value;
+		}}>` : J, t = (e) => e.participants.filter((e) => e.participantId !== this.me).map((e) => e.displayName || e.participantId).join(", "), n = this.query.trim().toLowerCase(), r = n ? this.items.filter((e) => `${e.title ?? ""} ${e.correlationId} ${t(e)}`.toLowerCase().includes(n)) : this.items;
+		return this.loaded ? r.length ? K`${e}<ul part="list" role="listbox" aria-label="Conversations">
+      ${r.map((e) => K`<li part="item" role="option" tabindex="0" aria-selected=${this.selected === e.id}
             @click=${() => this.select(e)} @keydown=${(t) => t.key === "Enter" && this.select(e)}>
           <div class="top">
             <span class="title">${e.title || e.correlationId}</span>
             ${e.status === "CLOSED" ? K`<span class="closed">closed</span>` : J}
             ${e.unread ? K`<span class="unread" aria-label="${e.unread} unread">${e.unread}</span>` : J}
           </div>
-          <div class="meta">with ${t} · <span title=${e.updatedAt}>${We(e.updatedAt)}</span></div>
-        </li>`;
-		})}
-    </ul>` : K`<div class="empty">No conversations.</div>`;
+          <div class="meta">with ${t(e)} · <span title=${e.updatedAt}>${We(e.updatedAt)}</span></div>
+        </li>`)}
+    </ul>` : K`${e}<div class="empty" part="empty"><slot name="empty">No conversations.</slot></div>` : K`<div class="empty" role="status">Loading…</div>`;
 	}
 };
 customElements.get("commons-conversation-list") || customElements.define("commons-conversation-list", zt);
@@ -1422,13 +1445,16 @@ var Bt = class extends $ {
   `];
 	}
 	connectedCallback() {
-		super.connectedCallback(), this.unsubscribe?.(), this.baseUrl && (this.unsubscribe = Rt(this.baseUrl, this.auth).subscribe((e) => this.apply(e)));
+		super.connectedCallback(), this.watch();
 	}
 	disconnectedCallback() {
-		super.disconnectedCallback(), this.unsubscribe?.();
+		super.disconnectedCallback(), this.unsubscribe?.(), this.unsubscribe = void 0, this.watching = void 0;
+	}
+	watch() {
+		this.baseUrl && this.isConnected && this.watching !== this.baseUrl && (this.unsubscribe?.(), this.watching = this.baseUrl, this.unsubscribe = Rt(this.baseUrl, this.auth).subscribe((e) => this.apply(e)));
 	}
 	updated(e) {
-		if (e.has("baseUrl") && this.baseUrl && this.isConnected && (this.unsubscribe?.(), this.unsubscribe = Rt(this.baseUrl, this.auth).subscribe((e) => this.apply(e))), (e.has("conversationId") || e.has("baseUrl")) && this.baseUrl && this.conversationId && this.reload(), e.has("messages")) {
+		if (e.has("baseUrl") && this.watch(), (e.has("conversationId") || e.has("baseUrl")) && this.baseUrl && this.conversationId && this.reload(), e.has("messages")) {
 			let e = this.renderRoot.querySelector(".messages");
 			e?.scrollTo({ top: e.scrollHeight });
 		}
@@ -1561,12 +1587,12 @@ var Bt = class extends $ {
     </form>`;
 	}
 	renderAttachment(e) {
-		return e.caseId && customElements.get("commons-upload-case") ? K`<commons-upload-case class="card" base-url=${this.attachmentsUrl ?? ""} case-id=${e.caseId}
-          .auth=${this.auth}></commons-upload-case>` : K`<div class="card"><strong>${e.name ?? "Attachment"}</strong></div>`;
+		return e.caseId && this.attachmentsUrl && customElements.get("commons-upload-case") ? K`<commons-upload-case class="card" base-url=${this.attachmentsUrl ?? ""} case-id=${e.caseId}
+          .me=${this.me} .auth=${this.auth}></commons-upload-case>` : K`<div class="card"><strong>${e.name ?? "Attachment"}</strong></div>`;
 	}
 };
 customElements.get("commons-conversation") || customElements.define("commons-conversation", Bt);
 //#endregion
-export { Ft as ChatClient, Bt as CommonsConversation, zt as CommonsConversationList, Pe as bearer, Re as configureAuth, Fe as devUser };
+export { Ft as ChatClient, Bt as CommonsConversation, zt as CommonsConversationList, Pe as bearer, Rt as chatFeed, Re as configureAuth, Fe as devUser };
 
 //# sourceMappingURL=chat-ui.bundle.js.map

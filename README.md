@@ -78,6 +78,9 @@ In dev mode, http://localhost:5173/playground.html puts every commons component 
 services: send yourself notifications, start a chat with a simulated agent that streams, sends forms and asks for
 uploads, and fill in an upload case. The log at the bottom shows the events the components fire.
 
+http://localhost:5173/hub.html is the same services as one page: `<commons-hub>` with notifications, chats, files
+and a custom pane. A notification about a request opens that request's chat.
+
 ### Headless
 
 `./scripts/walkthrough.sh` plays the whole case over the APIs, persona by persona:
@@ -136,6 +139,7 @@ The model decides what to do next, but the rules that matter are enforced in cod
 | `webapp/public/app.js` | The portal: sign-in, requests, Finance reviews; the rest is commons components |
 | `webapp/public/vendor/` | The commons UI bundles, copied in by `scripts/vendor-ui.sh` |
 | `webapp/public/playground.html` | Every component on one page (dev mode) |
+| `webapp/public/hub.html` | The same services as one `<commons-hub>` (dev mode) |
 | `thunder/tenant-resources.yaml` | Users, groups and the portal client |
 
 ## Things to know

@@ -8,4 +8,6 @@ for pkg in notification chat attachment; do
     (cd "$COMMONS_DIR/$pkg/ui" && npm run build --silent >/dev/null)
     cp "$COMMONS_DIR/$pkg/ui/dist/$pkg-ui.bundle.js" webapp/public/vendor/
 done
+(cd "$COMMONS_DIR/hub-ui" && npm run build --silent >/dev/null)
+cp "$COMMONS_DIR/hub-ui/dist/hub-ui.bundle.js" webapp/public/vendor/
 ls -1 webapp/public/vendor

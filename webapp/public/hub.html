@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Commons Hub</title>
+  <script src="config.js"></script>
+  <script type="module" src="vendor/hub-ui.bundle.js"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { height: 100%; margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f5f6f8; }
+    @media (prefers-color-scheme: dark) { body { background: #0f1218; color: #e6e8ec; } }
+    .brand { font-weight: 700; padding: 4px 10px 12px; }
+    .who { padding: 8px 10px; font-size: 12px; display: grid; gap: 4px; }
+    .who select { font: inherit; }
+    .about { max-width: 640px; line-height: 1.6; }
+    .about code { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <!-- The whole page is one element; the persona picker and the About pane are the page's own content. -->
+  <commons-hub id="hub" routing="hash">
+    <div slot="brand" class="brand">Tenant hub</div>
+    <label slot="nav-end" class="who">Acting as <select id="persona"></select></label>
+    <section pane="about" label="About" class="about">
+      <h2>One tag</h2>
+      <p>This page is <code>&lt;commons-hub&gt;</code> with three service URLs. Notifications, chats and files come
+        from the commons services; a click on a notification about a request opens that request's chat. This pane is
+        the page's own markup, added with <code>&lt;section pane="about" label="About"&gt;</code>.</p>
+    </section>
+  </commons-hub>
+
+  <script type="module">
+    import {configureAuth, devUser} from "./vendor/hub-ui.bundle.js";
+
+    const PERSONAS = {tara: ["Tenant"], carlos: ["Contractor"], priya: ["PropertyManager"], fernando: ["Finance"]};
+    const me = localStorage.getItem("persona") || "tara";
+    const select = document.getElementById("persona");
+    for (const id of Object.keys(PERSONAS)) select.append(new Option(`${id} (${PERSONAS[id][0]})`, id, false, id === me));
+    select.onchange = (e) => { localStorage.setItem("persona", e.target.value); location.reload(); };
+
+    const {api, auth} = window.APP_CONFIG;
+    if (auth !== "dev") document.body.textContent = "The hub demo needs dev mode (scripts/dev.sh).";
+    configureAuth(devUser(me, PERSONAS[me]));
+
+    const hub = document.getElementById("hub");
+    hub.me = me;
+    hub.admin = PERSONAS[me].includes("PropertyManager");
+    hub.setAttribute("notifications-url", api.notifications);
+    hub.setAttribute("chat-url", api.chat);
+    hub.setAttribute("attachments-url", api.attachments);
+  </script>
+</body>
+</html>
